@@ -27,26 +27,26 @@ jobs:
 
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE
-      - uses: actions/checkout@v2
+      - name: Checkout latest changes
+        uses: actions/checkout@v2
 
-      # Set up Python 3.9 environment
-      - name: Set up Python 3.9
-        uses: actions/setup-python@v1
-        with:
-          python-version: "3.9"
+      - name: Generate Deployment Package
+        # zip all files except .git
+        run: zip -r deploy.zip * -x '*.git*'
 
-      # Set up cache for pip
-      - name: Get pip cache dir
-        id: pip-cache
-        run: |
-          echo "::set-output name=dir::$(pip cache dir)"
-      - name: Cache pip
-        uses: actions/cache@v1
+      - name: Get timestamp
+        uses: gerred/actions/current-time@master
+        id: current-time
+        
+      - name: Run string replace
+        uses: frabert/replace-string-action@master
+        id: format-time
         with:
-          path: ${{ steps.pip-cache.outputs.dir }}
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
+          # replaces '[:\.]+' in the timestamp with '-'
+          pattern: '[:\.]+'
+          string: "${{ steps.current-time.outputs.time }}"
+          replace-with: '-'
+          flags: 'g'
 
       # Configure AWS Credentials
       - name: Configure AWS Credentials
@@ -56,30 +56,63 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
-      # Elastic Beanstalk CLI version
-      - name: Get EB CLI version
-        run: |
-          python -m pip install --upgrade pip
-          pip install awsebcli --upgrade
-          eb --version
-
-      # Configure AWS Credentials
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
+          
+      - name: Deploy to EB
+        uses: einaregilsson/beanstalk-deploy@v14
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
+          # Input the credentials you used to setup AWS CLI and credentials for the application environment
+          application_name: uisyncmanual
+          environment_name: uisyncmanual-dev
+          aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          version_label: "${{ steps.format-time.outputs.replaced }}"
+          region: us-east-1
+          deployment_package: deploy.zip
 
-      # Create the Elastic Beanstalk application
-      - name: Create EBS application
-        run: |
-          eb init -p python-3.9 ui-sync --region us-east-1
 
-      # Deploy to (or Create) the Elastic Beanstalk environment
-      - name: Create test environment & deploy
-        run: |
-          (eb use ui-sync-${{ needs.eb-env.outputs.env-name }} \
-            && eb status ui-sync-${{ needs.eb-env.outputs.env-name }} \
-            && eb deploy ) \
-          || eb create ui-sync-${{ needs.eb-env.outputs.env-name }}
+      ## Set up Python 3.9 environment
+      #- name: Set up Python 3.9
+        #uses: actions/setup-python@v1
+        #with:
+          #python-version: "3.9"
+
+      ## Set up cache for pip
+      #- name: Get pip cache dir
+        #id: pip-cache
+        #run: |
+          #echo "::set-output name=dir::$(pip cache dir)"
+      #- name: Cache pip
+        #uses: actions/cache@v1
+        #with:
+          #path: ${{ steps.pip-cache.outputs.dir }}
+          #key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          #restore-keys: |
+            #${{ runner.os }}-pip-
+
+      ## Elastic Beanstalk CLI version
+      #- name: Get EB CLI version
+        #run: |
+          #python -m pip install --upgrade pip
+          #pip install awsebcli --upgrade
+          #eb --version
+
+      ## Configure AWS Credentials
+      #- name: Configure AWS Credentials
+        #uses: aws-actions/configure-aws-credentials@v1
+        #with:
+          #aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          #aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          #aws-region: us-east-1
+
+      ## Create the Elastic Beanstalk application
+      #- name: Create EBS application
+        #run: |
+          #eb init -p python-3.9 ui-sync --region us-east-1
+
+      ## Deploy to (or Create) the Elastic Beanstalk environment
+      #- name: Create environment & deploy
+        #run: |
+          #(eb use ui-sync-${{ needs.eb-env.outputs.env-name }} \
+            #&& eb status ui-sync-${{ needs.eb-env.outputs.env-name }} \
+            #&& eb deploy ) \
+          #|| eb create ui-sync-${{ needs.eb-env.outputs.env-name }}

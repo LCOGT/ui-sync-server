@@ -1,3 +1,6 @@
+import eventlet
+eventlet.monkey_patch()
+
 from flask import Flask, render_template, session, request
 from flask_socketio import SocketIO, Namespace, emit, join_room, leave_room, \
     rooms, disconnect
@@ -9,14 +12,16 @@ from pprint import pprint
 # Set this variable to "threading", "eventlet" or "gevent" to test the
 # different async modes, or leave it set to None for the application to choose
 # the best option based on installed packages.
-async_mode = None
+async_mode = 'eventlet'
 
-app = Flask(__name__)
-app.config['SECRET_KEY'] = 'secret!'
+application = app = Flask(__name__)
+application.config['SECRET_KEY'] = 'secret!'
+CORS(application, resources={r'/*': {'origins': '*'}})
+socketio = SocketIO(application, cors_allowed_origins='*', async_mode=async_mode)
 
-CORS(app, resources={r'/*': {'origins': '*'}})
-
-socketio = SocketIO(app, cors_allowed_origins='*', async_mode=async_mode)
+@app.route("/")
+def online_status():
+    return "<p>UI Sync is online</p>"
 
 # Helper method to enable json conversion with sets
 def set_default(obj):
@@ -190,6 +195,6 @@ def handle_disconnect():
 def handle_my_ping():
     emit('my_pong')
 
-if __name__ == '__main__':
-    #socketio.run(app, host="0.0.0.0", port="5001")
-    socketio.run(app)
+#if __name__ == '__main__':
+    #socketio.run(app, host="0.0.0.0", port="8000")
+    #socketio.run(application)
